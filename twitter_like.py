@@ -14,7 +14,9 @@ API_KEY = os.getenv('API_KEY')
 API_SECRET = os.getenv('API_SECRET')
 ACCESS_TOKEN = os.getenv('ACCESS_TOKEN')
 ACCESS_TOKEN_SECRET = os.getenv('ACCESS_TOKEN_SECRET')
+BEARER_TOKEN = os.getenv('BEARER_TOKEN')
 ENCRYPTION_KEY = Fernet.generate_key()
+
 # 암호화 및 복호화 함수
 def encrypt(data, key):
     f = Fernet(key)
@@ -25,33 +27,32 @@ def decrypt(data, key):
     return f.decrypt(data).decode()
 
 # Twitter API 인증
-auth = tweepy.OAuth1UserHandler(API_KEY, API_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
-api = tweepy.API(auth)
+client = tweepy.Client(bearer_token=BEARER_TOKEN, consumer_key=API_KEY, consumer_secret=API_SECRET, access_token=ACCESS_TOKEN, access_token_secret=ACCESS_TOKEN_SECRET)
 
 # 데이터 저장용 DataFrame 초기화
 data = []
 
 # 게시물에 좋아요를 누르고 기록하는 함수
-def like_and_record(tweet):
+def like_and_record(tweet_id, username, text, created_at):
     try:
-        api.create_favorite(tweet.id)
+        client.like(tweet_id)
         record = {
-            'url': f"https://twitter.com/{tweet.user.screen_name}/status/{tweet.id}",
-            'author': tweet.user.screen_name,
-            'time': tweet.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            'url': f"https://twitter.com/{username}/status/{tweet_id}",
+            'author': username,
+            'time': created_at.strftime("%Y-%m-%d %H:%M:%S"),
             'status': '좋아요'
         }
         data.append(record)
-        update_log(f"{tweet.user.screen_name}님의 트윗에 좋아요를 눌렀습니다: {tweet.created_at.strftime('%Y-%m-%d %H:%M:%S')}\n{tweet.text}\n")
+        update_log(f"{username}님의 트윗에 좋아요를 눌렀습니다: {created_at.strftime('%Y-%m-%d %H:%M:%S')}\n{text}\n")
     except Exception as e:
         record = {
-            'url': f"https://twitter.com/{tweet.user.screen_name}/status/{tweet.id}",
-            'author': tweet.user.screen_name,
-            'time': tweet.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            'url': f"https://twitter.com/{username}/status/{tweet_id}",
+            'author': username,
+            'time': created_at.strftime("%Y-%m-%d %H:%M:%S"),
             'status': '좋아요 실패'
         }
         data.append(record)
-        update_log(f"{tweet.user.screen_name}님의 트윗에 좋아요를 누르지 못했습니다: {tweet.created_at.strftime('%Y-%m-%d %H:%M:%S')}\n{tweet.text}\n")
+        update_log(f"{username}님의 트윗에 좋아요를 누르지 못했습니다: {created_at.strftime('%Y-%m-%d %H:%M:%S')}\n{text}\n")
 
 # 데이터 저장 함수
 def save_data():
@@ -59,9 +60,9 @@ def save_data():
     df.to_csv('like_records.csv', index=False)
 
 # 스트리밍 리스너 클래스 정의
-class MyStreamListener(tweepy.StreamListener):
-    def on_status(self, status):
-        like_and_record(status)
+class MyStreamListener(tweepy.StreamingClient):
+    def on_tweet(self, tweet):
+        like_and_record(tweet.id, tweet.author_id, tweet.text, tweet.created_at)
         save_data()
 
     def on_error(self, status_code):
@@ -70,10 +71,10 @@ class MyStreamListener(tweepy.StreamListener):
             return False
 
 # 스트리밍 함수
-def start_stream(username):
-    myStreamListener = MyStreamListener()
-    myStream = tweepy.Stream(auth=api.auth, listener=myStreamListener)
-    myStream.filter(follow=[str(api.get_user(screen_name=username).id)], is_async=True)
+def start_stream(user_id):
+    myStreamListener = MyStreamListener(BEARER_TOKEN)
+    myStreamListener.add_rules(tweepy.StreamRule(f"from:{user_id}"))
+    myStreamListener.filter()
 
 # 계정 정보 암호화 및 저장
 def save_credentials(username, password):
@@ -105,7 +106,8 @@ def on_login():
     if username and password:
         save_credentials(username, password)
         messagebox.showinfo("정보", "계정 정보가 성공적으로 저장되었습니다!")
-        start_stream(username)  # 로그인 후 스트리밍 시작
+        user = client.get_user(username=username)
+        start_stream(user.data.id)  # 로그인 후 스트리밍 시작
     else:
         messagebox.showwarning("경고", "아이디와 비밀번호를 모두 입력해주세요.")
 
