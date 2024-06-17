@@ -5,14 +5,16 @@ import json
 import pandas as pd
 from cryptography.fernet import Fernet
 from datetime import datetime
+from dotenv import load_dotenv
+import os
 
-# 설정 부분
-API_KEY = 'YOUR_API_KEY'
-API_SECRET = 'YOUR_API_SECRET'
-ACCESS_TOKEN = 'YOUR_ACCESS_TOKEN'
-ACCESS_TOKEN_SECRET = 'YOUR_ACCESS_TOKEN_SECRET'
+load_dotenv()
+
+API_KEY = os.getenv('API_KEY')
+API_SECRET = os.getenv('API_SECRET')
+ACCESS_TOKEN = os.getenv('ACCESS_TOKEN')
+ACCESS_TOKEN_SECRET = os.getenv('ACCESS_TOKEN_SECRET')
 ENCRYPTION_KEY = Fernet.generate_key()
-
 # 암호화 및 복호화 함수
 def encrypt(data, key):
     f = Fernet(key)
